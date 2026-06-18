@@ -85,6 +85,8 @@ namespace BookingSystem.API
             })
             .AddJwtBearer(options =>
             {
+                options.RequireHttpsMetadata = true;
+                options.SaveToken = true;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -97,14 +99,25 @@ namespace BookingSystem.API
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
                 };
-            });
 
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = ctx =>
+                    {
+                        Console.WriteLine("JWT authentication failed: " + ctx.Exception);
+                        return Task.CompletedTask;
+                    }
+                };
+            });        
 
             builder.Services.AddAuthorization();
 
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IBusinessService, BusinessService>();
 
             var app = builder.Build();
+
+            Console.WriteLine("JWT KEY: " + builder.Configuration["Jwt:Key"]);
 
             if (app.Environment.IsDevelopment())
             {

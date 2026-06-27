@@ -18,14 +18,17 @@ namespace BookingSystem.Infrastructure.Services
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
         private readonly AppDbContext _context;
+        private readonly ITokenService _tokenService;
 
         public AuthService(UserManager<ApplicationUser> userManager,
                            IConfiguration configuration,
-                           AppDbContext context)
+                           AppDbContext context,
+                           ITokenService tokenService)
         {
             _userManager = userManager;
             _configuration = configuration;
             _context = context;
+            _tokenService = tokenService;
         }
 
         public async Task<Result<AuthResponseDto>> RegisterCustomerAsync(RegisterCustomerDto dto)
@@ -89,7 +92,7 @@ namespace BookingSystem.Infrastructure.Services
             _context.Businesses.Add(business);
             await _context.SaveChangesAsync();
 
-            var token = await GenerateTokenAsync(user);
+            var token = await _tokenService.GenerateTokenAsync(user);
 
             return Result<AuthResponseDto>.Success(new AuthResponseDto
             {
@@ -119,7 +122,8 @@ namespace BookingSystem.Infrastructure.Services
 
             var roles = await _userManager.GetRolesAsync(user);
             var role = roles.FirstOrDefault() ?? string.Empty;
-            var token = await GenerateTokenAsync(user);
+
+            var token = await _tokenService.GenerateTokenAsync(user);
 
             return Result<AuthResponseDto>.Success(
                 new AuthResponseDto
@@ -176,7 +180,7 @@ namespace BookingSystem.Infrastructure.Services
                 return Result<AuthResponseDto>.Failure(errors, errors);
             }
 
-            var token = await GenerateTokenAsync(user);
+            var token = await _tokenService.GenerateTokenAsync(user);
 
             return Result<AuthResponseDto>.Success(new AuthResponseDto
             {
@@ -186,45 +190,6 @@ namespace BookingSystem.Infrastructure.Services
                 Email = user.Email!,
                 Role = role
             });
-        }
-
-        private async Task<string> GenerateTokenAsync(ApplicationUser user)
-        {
-            var roles = await _userManager.GetRolesAsync(user);
-
-            var claims = new List<Claim>
-            {
-                new(JwtRegisteredClaimNames.Sub, user.Id),
-                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new(ClaimTypes.NameIdentifier, user.Id),
-                new(ClaimTypes.Email, user.Email!),
-                new(ClaimTypes.Name, user.FullName)
-            };
-
-            foreach (var role in roles)
-            {
-                claims.Add(new Claim(ClaimTypes.Role, role));
-            }
-
-            var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
-
-            var creds = new SigningCredentials(
-                key,
-                SecurityAlgorithms.HmacSha256);
-
-            var expirationDays =
-                int.Parse(_configuration["Jwt:DurationInDays"]!);
-
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.UtcNow.AddDays(expirationDays),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
 }

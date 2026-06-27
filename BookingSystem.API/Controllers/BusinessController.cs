@@ -1,7 +1,6 @@
 ﻿using BookingSystem.Application.Common;
 using BookingSystem.Application.DTOs.Business;
 using BookingSystem.Application.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -18,8 +17,8 @@ namespace BookingSystem.API.Controllers
             _businessService = businessService;
         }
 
-        [HttpPost]
-        [Authorize(Roles = "BusinessOwner")]
+        [HttpPost("create-business")]
+        //[Authorize(Roles = "BusinessOwner")]
         public async Task<IActionResult> Create(CreateBusinessDto dto)
         {
             var ownerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

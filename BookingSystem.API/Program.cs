@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 using System.Text;
 
 namespace BookingSystem.API
@@ -21,8 +22,20 @@ namespace BookingSystem.API
             // Controllers
             // =======================
             builder.Services.AddControllers();
-
             builder.Services.AddEndpointsApiExplorer();
+
+            // =======================
+            // CORS (IMPORTANT for React/Angular)
+            // =======================
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyHeader()
+                          .AllowAnyMethod();
+                });
+            });
 
             // =======================
             // Swagger + JWT Support
@@ -54,9 +67,12 @@ namespace BookingSystem.API
                             {
                                 Type = ReferenceType.SecurityScheme,
                                 Id = "Bearer"
-                            }
+                            },
+                            Scheme = "bearer",
+                            Name = "Authorization",
+                            In = ParameterLocation.Header
                         },
-                        new string[] {}
+                        new List<string>()
                     }
                 });
             });
@@ -85,47 +101,63 @@ namespace BookingSystem.API
             })
             .AddJwtBearer(options =>
             {
-                options.RequireHttpsMetadata = true;
+                options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
                 options.SaveToken = true;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
+                    ClockSkew = TimeSpan.Zero,
 
                     ValidIssuer = builder.Configuration["Jwt:Issuer"],
                     ValidAudience = builder.Configuration["Jwt:Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+                    ),
+
+                    NameClaimType = ClaimTypes.Name,
+                    RoleClaimType = ClaimTypes.Role
                 };
 
                 options.Events = new JwtBearerEvents
                 {
-                    OnAuthenticationFailed = ctx =>
+                    OnAuthenticationFailed = context =>
                     {
-                        Console.WriteLine("JWT authentication failed: " + ctx.Exception);
+                        Console.WriteLine("JWT Auth Failed: " + context.Exception.Message);
                         return Task.CompletedTask;
                     }
                 };
-            });        
+            });
 
             builder.Services.AddAuthorization();
 
+            // =======================
+            // Dependency Injection
+            // =======================
+            builder.Services.AddScoped<ITokenService, TokenService>();
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IBusinessService, BusinessService>();
 
             var app = builder.Build();
 
-            Console.WriteLine("JWT KEY: " + builder.Configuration["Jwt:Key"]);
-
+            // =======================
+            // Swagger
+            // =======================
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
+            // =======================
+            // Middleware Pipeline
+            // =======================
             app.UseHttpsRedirection();
+
+            app.UseCors("AllowAll");
 
             app.UseAuthentication();
             app.UseAuthorization();
